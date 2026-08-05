@@ -215,7 +215,7 @@ export async function generateReport(
 
   if (!response.ok) {
     const errorObj = isObject(data) && isString(data.error)
-      ? (data as ApiError)
+      ? (data as unknown as ApiError)
       : { error: 'generate_report_failed' };
     throw new ApiClientError(errorObj.error, errorObj.error, response.status);
   }
