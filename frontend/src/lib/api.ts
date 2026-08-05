@@ -15,6 +15,7 @@ import {
   DoctorResponseSuccess,
   DoctorResponseCheck,
   ApiError,
+  SlotName,
 } from '@/types';
 import { API_BASE_URL, API_TIMEOUT_MS } from './constants';
 
@@ -170,7 +171,9 @@ export async function sendInterviewTurn(
 
   // Defensive parse — every field validated
   const next_question = data.next_question === null ? null : assertField(data, 'next_question', isString);
-  const slot_targeted = data.slot_targeted === null ? null : assertField(data, 'slot_targeted', isString);
+  const slot_targeted = data.slot_targeted === null
+    ? null
+    : assertField(data, 'slot_targeted', isString) as SlotName;
   const red_flag_detected = assertField(data, 'red_flag_detected', isBoolean);
   const recommend_emergency = assertField(data, 'recommend_emergency', isBoolean);
   const turns_used = assertField(data, 'turns_used', isNumber);
