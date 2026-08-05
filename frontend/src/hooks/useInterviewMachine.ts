@@ -331,7 +331,6 @@ export function useInterviewMachine() {
 
     recorder.onstop = () => {
       // Stop tracks
-      // @ts-expect-error — stream exists on recorder in some browsers
       recorder.stream?.getTracks().forEach((t: MediaStreamTrack) => t.stop());
 
       const chunks = audioChunksRef.current;
