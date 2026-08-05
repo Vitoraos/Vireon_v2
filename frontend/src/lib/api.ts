@@ -16,6 +16,7 @@ import {
   DoctorResponseCheck,
   ApiError,
   SlotName,
+  DoctorAction,
 } from '@/types';
 import { API_BASE_URL, API_TIMEOUT_MS } from './constants';
 
@@ -349,7 +350,11 @@ export async function checkDoctorResponse(
   }
 
   const responded = assertField(data, 'responded', isBoolean);
-  const action = data.action === null ? null : isString(data.action) ? data.action : null;
+  const action = data.action === null
+    ? null
+    : isString(data.action)
+      ? (data.action as DoctorAction)
+      : null;
   const note = data.note === null ? null : isString(data.note) ? data.note : null;
 
   return { responded, action, note };
