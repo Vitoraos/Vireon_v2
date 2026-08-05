@@ -119,8 +119,8 @@ export async function transcribeAudio(
   const data = await parseJsonSafely(response);
 
   if (!response.ok) {
-    const errorObj = isObject(data) && isString(data.error)
-      ? (data as ApiError)
+    const errorObj: ApiError = isObject(data) && isString(data.error)
+      ? { error: data.error }
       : { error: 'transcription_failed' };
     throw new ApiClientError(
       errorObj.error,
@@ -158,8 +158,8 @@ export async function sendInterviewTurn(
   const data = await parseJsonSafely(response);
 
   if (!response.ok) {
-    const errorObj = isObject(data) && isString(data.error)
-      ? (data as ApiError)
+    const errorObj: ApiError = isObject(data) && isString(data.error)
+      ? { error: data.error }
       : { error: 'interview_turn_failed' };
     throw new ApiClientError(errorObj.error, errorObj.error, response.status);
   }
@@ -214,8 +214,8 @@ export async function generateReport(
   const data = await parseJsonSafely(response);
 
   if (!response.ok) {
-    const errorObj = isObject(data) && isString(data.error)
-      ? (data as unknown as ApiError)
+    const errorObj: ApiError = isObject(data) && isString(data.error)
+      ? { error: data.error }
       : { error: 'generate_report_failed' };
     throw new ApiClientError(errorObj.error, errorObj.error, response.status);
   }
@@ -260,8 +260,8 @@ export async function getReport(reportId: string): Promise<GetReportResponse> {
   const data = await parseJsonSafely(response);
 
   if (!response.ok) {
-    const errorObj = isObject(data) && isString(data.error)
-      ? (data as ApiError)
+    const errorObj: ApiError = isObject(data) && isString(data.error)
+      ? { error: data.error }
       : { error: 'fetch_report_failed' };
     throw new ApiClientError(errorObj.error, errorObj.error, response.status);
   }
@@ -313,8 +313,8 @@ export async function submitDoctorResponse(
   const data = await parseJsonSafely(response);
 
   if (!response.ok) {
-    const errorObj = isObject(data) && isString(data.error)
-      ? (data as ApiError)
+    const errorObj: ApiError = isObject(data) && isString(data.error)
+      ? { error: data.error }
       : { error: 'doctor_response_failed' };
     throw new ApiClientError(errorObj.error, errorObj.error, response.status);
   }
@@ -335,8 +335,8 @@ export async function checkDoctorResponse(
   const data = await parseJsonSafely(response);
 
   if (!response.ok) {
-    const errorObj = isObject(data) && isString(data.error)
-      ? (data as ApiError)
+    const errorObj: ApiError = isObject(data) && isString(data.error)
+      ? { error: data.error }
       : { error: 'check_response_failed' };
     throw new ApiClientError(errorObj.error, errorObj.error, response.status);
   }
