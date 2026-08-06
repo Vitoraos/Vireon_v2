@@ -12,8 +12,12 @@ const {
 
 const QWEN_BASE_URL = process.env.QWEN_BASE_URL;
 const QWEN_MODEL = process.env.QWEN_MODEL;
+const QWEN_API_KEY = process.env.QWEN_API_KEY; // required for hosted providers (Groq etc), unused for local vLLM
 const QWEN_ENABLE_THINKING = process.env.QWEN_ENABLE_THINKING === 'true';
 const QWEN_TIMEOUT_MS = Number(process.env.QWEN_TIMEOUT_MS || 8000);
+// 'json_schema' = OpenAI-style response_format (Groq, OpenRouter, most hosted providers)
+// 'guided_json' = vLLM-specific extra_body (only if self-hosting Qwen 3 yourself)
+const QWEN_STRUCTURED_MODE = process.env.QWEN_STRUCTURED_MODE || 'json_schema';
 const SERVICE_NAME = 'qwen3';
 
 const SYSTEM_PROMPT_PATH = path.join(__dirname, 'qwen3-intake-system-prompt.txt');
@@ -29,18 +33,25 @@ function stripFences(text) {
 }
 
 /**
- * Core structured-call helper. Uses vLLM's guided_json (extra_body) so the
- * model is structurally constrained to the schema during decoding — this
- * eliminates malformed-JSON errors but NOT semantic errors (see
- * qwenSchemas.js comments), hence the zod validation pass after parsing.
+ * Core structured-call helper. Supports two structured-output mechanisms
+ * depending on where Qwen 3 is hosted, selected via QWEN_STRUCTURED_MODE:
  *
- * KNOWN GOTCHA: guided_json + Qwen3 has a documented breakage when
- * enable_thinking=false is combined with guided_json on some vLLM versions.
- * Test this combination explicitly against your actual vLLM version before
- * relying on it — if broken, the defensive parse/retry path below is what
- * keeps the turn alive instead of hard-failing.
+ *  - 'json_schema' (default): OpenAI-style response_format, used by Groq,
+ *    OpenRouter, and most hosted providers. This is what you want when
+ *    using a free hosted API key rather than self-hosting.
+ *  - 'guided_json': vLLM-specific extra_body param, only valid if you are
+ *    self-hosting Qwen 3 yourself via vLLM.
+ *
+ * Either way this eliminates malformed-JSON errors but NOT semantic errors
+ * (see qwenSchemas.js comments), hence the zod validation pass after parsing.
+ *
+ * KNOWN GOTCHA (guided_json mode only): guided_json + Qwen3 has a documented
+ * breakage when enable_thinking=false is combined with guided_json on some
+ * vLLM versions. Test explicitly against your actual vLLM version if you
+ * self-host — if broken, the defensive parse/retry path below is what keeps
+ * the turn alive instead of hard-failing.
  */
-async function callQwenStructured(sessionId, userMessage, jsonSchema, zodSchema, { isRetry = false } = {}) {
+async function callQwenStructured(sessionId, userMessage, jsonSchema, schemaName, zodSchema, { isRetry = false } = {}) {
   if (circuitBreaker.isOpen(sessionId, SERVICE_NAME)) {
     throw new Error('qwen_circuit_open');
   }
@@ -58,17 +69,27 @@ async function callQwenStructured(sessionId, userMessage, jsonSchema, zodSchema,
     });
   }
 
+  const body = { model: QWEN_MODEL, messages };
+
+  if (QWEN_STRUCTURED_MODE === 'guided_json') {
+    body.chat_template_kwargs = { enable_thinking: QWEN_ENABLE_THINKING };
+    body.extra_body = { guided_json: jsonSchema };
+  } else {
+    body.response_format = {
+      type: 'json_schema',
+      json_schema: { name: schemaName, schema: jsonSchema, strict: true }
+    };
+  }
+
   try {
     const response = await withTimeout(
       fetch(`${QWEN_BASE_URL}/chat/completions`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: QWEN_MODEL,
-          messages,
-          chat_template_kwargs: { enable_thinking: QWEN_ENABLE_THINKING },
-          extra_body: { guided_json: jsonSchema }
-        })
+        headers: {
+          'Content-Type': 'application/json',
+          ...(QWEN_API_KEY ? { Authorization: `Bearer ${QWEN_API_KEY}` } : {})
+        },
+        body: JSON.stringify(body)
       }),
       QWEN_TIMEOUT_MS,
       'qwen3'
@@ -88,7 +109,7 @@ async function callQwenStructured(sessionId, userMessage, jsonSchema, zodSchema,
   } catch (err) {
     if (!isRetry) {
       // one corrective retry per the project's coding rules, before giving up
-      return callQwenStructured(sessionId, userMessage, jsonSchema, zodSchema, { isRetry: true });
+      return callQwenStructured(sessionId, userMessage, jsonSchema, schemaName, zodSchema, { isRetry: true });
     }
     circuitBreaker.recordFailure(sessionId, SERVICE_NAME);
     throw err; // caller (routes) is responsible for the fallback response
@@ -112,7 +133,7 @@ async function getNextTurn(sessionId, params) {
     recent_history_native_language: recentHistory
   });
 
-  return callQwenStructured(sessionId, userMessage, INTERVIEW_TURN_JSON_SCHEMA, InterviewTurnQwenSchema);
+  return callQwenStructured(sessionId, userMessage, INTERVIEW_TURN_JSON_SCHEMA, 'interview_turn', InterviewTurnQwenSchema);
 }
 
 /**
@@ -128,7 +149,7 @@ async function generateReport(sessionId, params) {
     full_transcript_english_normalized: fullTranscriptEnglish
   });
 
-  return callQwenStructured(sessionId, userMessage, GENERATE_REPORT_JSON_SCHEMA, GenerateReportQwenSchema);
+  return callQwenStructured(sessionId, userMessage, GENERATE_REPORT_JSON_SCHEMA, 'clinical_report', GenerateReportQwenSchema);
 }
 
 module.exports = { getNextTurn, generateReport };
