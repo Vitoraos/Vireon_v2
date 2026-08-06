@@ -15,6 +15,8 @@ import {
   DoctorResponseSuccess,
   DoctorResponseCheck,
   ApiError,
+  SlotName,
+  DoctorAction,
 } from '@/types';
 import { API_BASE_URL, API_TIMEOUT_MS } from './constants';
 
@@ -93,6 +95,36 @@ function isObject(v: unknown): v is Record<string, unknown> {
   return v !== null && typeof v === 'object' && !Array.isArray(v);
 }
 
+// ─── Domain type guards (root cause fix) ───
+
+const SLOT_NAMES: SlotName[] = [
+  'duration',
+  'severity',
+  'associated_symptoms',
+  'relevant_history',
+  'anything_else',
+];
+
+function isSlotName(v: unknown): v is SlotName {
+  return isString(v) && SLOT_NAMES.includes(v as SlotName);
+}
+
+const REPORT_STATUSES = ['pending', 'responded'] as const;
+
+function isReportStatus(v: unknown): v is 'pending' | 'responded' {
+  return isString(v) && (REPORT_STATUSES as readonly string[]).includes(v);
+}
+
+const DOCTOR_ACTIONS: DoctorAction[] = [
+  'prescribe',
+  'request_appointment',
+  'recommend_emergency',
+];
+
+function isDoctorAction(v: unknown): v is DoctorAction {
+  return isString(v) && DOCTOR_ACTIONS.includes(v as DoctorAction);
+}
+
 // ─── API Methods ───
 
 /**
@@ -168,7 +200,7 @@ export async function sendInterviewTurn(
   }
 
   const next_question = data.next_question === null ? null : assertField(data, 'next_question', isString);
-  const slot_targeted = data.slot_targeted === null ? null : assertField(data, 'slot_targeted', isString);
+  const slot_targeted = data.slot_targeted === null ? null : assertField(data, 'slot_targeted', isSlotName);
   const red_flag_detected = assertField(data, 'red_flag_detected', isBoolean);
   const recommend_emergency = assertField(data, 'recommend_emergency', isBoolean);
   const turns_used = assertField(data, 'turns_used', isNumber);
@@ -228,7 +260,7 @@ export async function generateReport(
   const recommend_emergency = assertField(data, 'recommend_emergency', isBoolean);
   const full_transcript = assertField(data, 'full_transcript', isString);
   const turns_used = assertField(data, 'turns_used', isNumber);
-  const status = assertField(data, 'status', isString);
+  const status = assertField(data, 'status', isReportStatus);
 
   return {
     report_id,
@@ -242,7 +274,7 @@ export async function generateReport(
     recommend_emergency,
     full_transcript,
     turns_used,
-    status: status as 'pending' | 'responded',
+    status,
   };
 }
 
@@ -273,7 +305,7 @@ export async function getReport(reportId: string): Promise<GetReportResponse> {
   const recommend_emergency = assertField(data, 'recommend_emergency', isBoolean);
   const full_transcript = assertField(data, 'full_transcript', isString);
   const turns_used = assertField(data, 'turns_used', isNumber);
-  const status = assertField(data, 'status', isString);
+  const status = assertField(data, 'status', isReportStatus);
 
   return {
     report_id,
@@ -287,7 +319,7 @@ export async function getReport(reportId: string): Promise<GetReportResponse> {
     recommend_emergency,
     full_transcript,
     turns_used,
-    status: status as 'pending' | 'responded',
+    status,
   };
 }
 
@@ -318,7 +350,7 @@ export async function getLatestReport(): Promise<GetReportResponse> {
   const recommend_emergency = assertField(data, 'recommend_emergency', isBoolean);
   const full_transcript = assertField(data, 'full_transcript', isString);
   const turns_used = assertField(data, 'turns_used', isNumber);
-  const status = assertField(data, 'status', isString);
+  const status = assertField(data, 'status', isReportStatus);
 
   return {
     report_id,
@@ -332,7 +364,7 @@ export async function getLatestReport(): Promise<GetReportResponse> {
     recommend_emergency,
     full_transcript,
     turns_used,
-    status: status as 'pending' | 'responded',
+    status,
   };
 }
 
@@ -387,7 +419,7 @@ export async function checkDoctorResponse(
   }
 
   const responded = assertField(data, 'responded', isBoolean);
-  const action = data.action === null ? null : isString(data.action) ? data.action : null;
+  const action = data.action === null ? null : assertField(data, 'action', isDoctorAction);
   const note = data.note === null ? null : isString(data.note) ? data.note : null;
 
   return { responded, action, note };
