@@ -45,6 +45,27 @@ function getReportById(reportId) {
   return reportsById.get(reportId) || null;
 }
 
+/**
+ * Returns the single most recently created report — matches this project's
+ * MVP scope of "one active report view for the demo" (multi-report queues
+ * are explicitly out of scope per the PRD). Lets the doctor dashboard load
+ * without needing a report_id already in hand, since in a real demo the
+ * doctor's device has no way to know the ID a patient's session generated
+ * on a different device.
+ *
+ * NOTE: with multiple concurrent test sessions this returns whichever was
+ * created last, not necessarily "the one you're testing right now" — fine
+ * for a single-active-report demo, would need real per-doctor session
+ * scoping beyond that.
+ */
+function getLatestReport() {
+  let latest = null;
+  for (const report of reportsById.values()) {
+    if (!latest || report.created_at > latest.created_at) latest = report;
+  }
+  return latest;
+}
+
 function saveDoctorResponse({ reportId, action, note }) {
   const response = { report_id: reportId, action, note, created_at: new Date().toISOString() };
   doctorResponsesByReportId.set(reportId, response);
@@ -63,6 +84,7 @@ module.exports = {
   findExistingReportForSession,
   createReport,
   getReportById,
+  getLatestReport,
   saveDoctorResponse,
   getDoctorResponse
 };
