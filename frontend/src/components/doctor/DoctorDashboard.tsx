@@ -9,7 +9,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Report, DoctorAction } from '@/types';
-import { getReport, submitDoctorResponse } from '@/lib/api';
+import { getReport, getLatestReport, submitDoctorResponse } from '@/lib/api';
 import { ReportViewer } from './ReportViewer';
 import { ActionSelector } from './ActionSelector';
 import { NoteInput } from './NoteInput';
@@ -30,20 +30,16 @@ export function DoctorDashboard() {
   const [submitted, setSubmitted] = useState(false);
 
   const fetchReport = useCallback(async () => {
-    if (!reportId) {
-      setError('No report ID provided. Use ?report_id=... in the URL.');
-      setLoading(false);
-      return;
-    }
-
     try {
       setLoading(true);
       setError(null);
-      const data = await getReport(reportId);
+      const data = reportId
+        ? await getReport(reportId)
+        : await getLatestReport();
       setReport(data);
     } catch (err) {
       console.error('Failed to fetch report:', err);
-      setError('Could not load the report. Please check the report ID and try again.');
+      setError('Could not load a report. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -54,12 +50,12 @@ export function DoctorDashboard() {
   }, [fetchReport]);
 
   const handleSubmit = useCallback(async () => {
-    if (!reportId || !selectedAction) return;
+    if (!report?.report_id || !selectedAction) return;
 
     try {
       setSubmitting(true);
       await submitDoctorResponse({
-        report_id: reportId,
+        report_id: report.report_id,
         action: selectedAction,
         note: note.trim(),
       });
@@ -70,7 +66,7 @@ export function DoctorDashboard() {
     } finally {
       setSubmitting(false);
     }
-  }, [reportId, selectedAction, note]);
+  }, [report, selectedAction, note]);
 
   if (loading) {
     return (
