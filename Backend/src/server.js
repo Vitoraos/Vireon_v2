@@ -7,6 +7,7 @@ const interviewTurnRoute = require('./routes/interviewTurn');
 const generateReportRoute = require('./routes/generateReport');
 const reportsRoute = require('./routes/reports');
 const doctorResponseRoute = require('./routes/doctorResponse');
+const ttsRoute = require('./routes/tts');
 
 const app = express();
 app.use(cors());
@@ -17,6 +18,7 @@ app.use(interviewTurnRoute);
 app.use(generateReportRoute);
 app.use(reportsRoute);
 app.use(doctorResponseRoute);
+app.use(ttsRoute);
 
 app.get('/health', (req, res) => res.json({ ok: true }));
 
