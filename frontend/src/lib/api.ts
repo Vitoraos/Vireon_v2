@@ -112,7 +112,7 @@ export async function transcribeAudio(
     {
       method: 'POST',
       body: formData,
-      timeout: 30000, // STT can take up to 15s polling on backend
+      timeout: 30000,
     }
   );
 
@@ -120,7 +120,7 @@ export async function transcribeAudio(
 
   if (!response.ok) {
     const errorObj = isObject(data) && isString(data.error)
-      ? (data as ApiError)
+      ? (data as unknown as ApiError)
       : { error: 'transcription_failed' };
     throw new ApiClientError(
       errorObj.error,
@@ -129,7 +129,6 @@ export async function transcribeAudio(
     );
   }
 
-  // Defensive: validate response shape
   if (!isObject(data)) {
     throw new ApiClientError('Invalid response shape', 'invalid_response');
   }
@@ -159,7 +158,7 @@ export async function sendInterviewTurn(
 
   if (!response.ok) {
     const errorObj = isObject(data) && isString(data.error)
-      ? (data as ApiError)
+      ? (data as unknown as ApiError)
       : { error: 'interview_turn_failed' };
     throw new ApiClientError(errorObj.error, errorObj.error, response.status);
   }
@@ -168,7 +167,6 @@ export async function sendInterviewTurn(
     throw new ApiClientError('Invalid response shape', 'invalid_response');
   }
 
-  // Defensive parse — every field validated
   const next_question = data.next_question === null ? null : assertField(data, 'next_question', isString);
   const slot_targeted = data.slot_targeted === null ? null : assertField(data, 'slot_targeted', isString);
   const red_flag_detected = assertField(data, 'red_flag_detected', isBoolean);
@@ -215,7 +213,7 @@ export async function generateReport(
 
   if (!response.ok) {
     const errorObj = isObject(data) && isString(data.error)
-      ? (data as ApiError)
+      ? (data as unknown as ApiError)
       : { error: 'generate_report_failed' };
     throw new ApiClientError(errorObj.error, errorObj.error, response.status);
   }
@@ -224,7 +222,6 @@ export async function generateReport(
     throw new ApiClientError('Invalid response shape', 'invalid_response');
   }
 
-  // Validate required report fields
   const report_id = assertField(data, 'report_id', isString);
   const chief_complaint = assertField(data, 'chief_complaint', isString);
   const red_flag_detected = assertField(data, 'red_flag_detected', isBoolean);
@@ -261,7 +258,7 @@ export async function getReport(reportId: string): Promise<GetReportResponse> {
 
   if (!response.ok) {
     const errorObj = isObject(data) && isString(data.error)
-      ? (data as ApiError)
+      ? (data as unknown as ApiError)
       : { error: 'fetch_report_failed' };
     throw new ApiClientError(errorObj.error, errorObj.error, response.status);
   }
@@ -270,7 +267,6 @@ export async function getReport(reportId: string): Promise<GetReportResponse> {
     throw new ApiClientError('Invalid response shape', 'invalid_response');
   }
 
-  // Reuse validation logic from generateReport
   const report_id = assertField(data, 'report_id', isString);
   const chief_complaint = assertField(data, 'chief_complaint', isString);
   const red_flag_detected = assertField(data, 'red_flag_detected', isBoolean);
@@ -307,7 +303,7 @@ export async function getLatestReport(): Promise<GetReportResponse> {
 
   if (!response.ok) {
     const errorObj = isObject(data) && isString(data.error)
-      ? (data as ApiError)
+      ? (data as unknown as ApiError)
       : { error: 'fetch_latest_report_failed' };
     throw new ApiClientError(errorObj.error, errorObj.error, response.status);
   }
@@ -359,7 +355,7 @@ export async function submitDoctorResponse(
 
   if (!response.ok) {
     const errorObj = isObject(data) && isString(data.error)
-      ? (data as ApiError)
+      ? (data as unknown as ApiError)
       : { error: 'doctor_response_failed' };
     throw new ApiClientError(errorObj.error, errorObj.error, response.status);
   }
@@ -381,7 +377,7 @@ export async function checkDoctorResponse(
 
   if (!response.ok) {
     const errorObj = isObject(data) && isString(data.error)
-      ? (data as ApiError)
+      ? (data as unknown as ApiError)
       : { error: 'check_response_failed' };
     throw new ApiClientError(errorObj.error, errorObj.error, response.status);
   }
@@ -420,7 +416,6 @@ export async function synthesizeSpeech(text: string): Promise<Blob | null> {
 
     return await response.blob();
   } catch (err) {
-    // 404, network error, timeout — all fall back to text-only
     console.warn('TTS unavailable, falling back to text-only:', err);
     return null;
   }
