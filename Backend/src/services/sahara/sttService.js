@@ -8,14 +8,6 @@ const SAHARA_STT_BASE_URL = process.env.SAHARA_STT_BASE_URL;
 const SAHARA_STT_MODE = process.env.SAHARA_STT_MODE || 'batch'; // 'batch' | 'streaming'
 const SERVICE_NAME = 'sahara_stt';
 
-/**
- * PLACEHOLDER 1: batch mode works today with the current API key tier.
- * Streaming mode (wss://infer.voice.intron.io/stt/v1/stream) needs a
- * confirmed Integrator Account — see .env.example. Once confirmed, implement
- * transcribeStreaming() below and flip SAHARA_STT_MODE=streaming; nothing
- * else in the codebase needs to change, since routes call transcribe()
- * and never care which mode is active.
- */
 async function transcribe(sessionId, audioBuffer, audioFileName) {
   if (SAHARA_STT_MODE === 'streaming') {
     return transcribeStreaming(sessionId, audioBuffer, audioFileName);
@@ -33,15 +25,8 @@ async function transcribeBatch(sessionId, audioBuffer, audioFileName) {
     form.append('audio_file_blob', audioBuffer, audioFileName);
     form.append('audio_file_name', audioFileName);
 
-    // Optional post-processing, per confirmed Sahara docs — opt-in only via
-    // env, both unset by default. Deliberately NOT wiring get_treatment_plan,
-    // get_differential_diagnosis, get_practice_guidelines, or get_icd_codes:
-    // those generate diagnostic/treatment content directly from STT, which
-    // is exactly what this project's PRD says the AI must never do ("does
-    // not diagnose or prescribe"). Enabling them would bypass that safety
-    // boundary one layer upstream of Qwen 3, not respect it.
-    const useCategory = process.env.SAHARA_STT_USE_CATEGORY; // e.g. 'file_category_telehealth'
-    const inputLanguage = process.env.SAHARA_STT_INPUT_LANGUAGE; // ASR input language code, see Sahara's supported-languages page
+    const useCategory = process.env.SAHARA_STT_USE_CATEGORY;
+    const inputLanguage = process.env.SAHARA_STT_INPUT_LANGUAGE;
     if (useCategory) form.append('use_category', useCategory);
     if (inputLanguage) form.append('use_language_asr_input', inputLanguage);
 
@@ -68,15 +53,19 @@ async function transcribeBatch(sessionId, audioBuffer, audioFileName) {
   }
 }
 
-async function pollForTranscript(fileId, maxAttempts = 20, intervalMs = 1500) {
-  // NOTE: exact response field names for GET /file/v1/status/:id (status,
-  // transcript) are inferred from the upload endpoint's pattern, not
-  // independently confirmed against that specific endpoint's docs.
-  // DIAGNOSTIC LOGGING added below: since a real timeout was hit against
-  // live Render logs with no way to tell whether the cause is (a) genuinely
-  // slow processing or (b) wrong field names causing 'completed' to never
-  // match, the raw response is now logged so the next occurrence reveals
-  // the real shape instead of guessing again.
+async function pollForTranscript(fileId, maxAttempts = 26, intervalMs = 1500) {
+  // CONFIRMED against real Render logs (2026-08-06): the actual shape is
+  // data.processing_status (values seen: "FILE_PROCESSING", "FILE_TRANSCRIBED")
+  // and data.audio_transcript — NOT data.status / data.transcript as
+  // originally guessed. Fixed below.
+  //
+  // TIMING NOTE: a real transcript took ~28.5s to complete in testing —
+  // right at the edge of the old 30s budget. Bumped to 26×1.5s=39s here for
+  // margin, BUT this only helps if the frontend's own client-side timeout
+  // is also widened — frontend/src/lib/api.ts's transcribeAudio() currently
+  // aborts at 30000ms, which would still fire and show an error even after
+  // this fix, on any request that takes as long as the one just observed.
+  // Flag this to Bright: bump that timeout to at least 45000.
   for (let i = 0; i < maxAttempts; i++) {
     await new Promise((r) => setTimeout(r, intervalMs));
     const statusRes = await fetch(`${SAHARA_STT_BASE_URL}/file/v1/status/${fileId}`, {
@@ -84,28 +73,20 @@ async function pollForTranscript(fileId, maxAttempts = 20, intervalMs = 1500) {
     });
     if (!statusRes.ok) {
       console.warn(`sahara_stt_poll_http_error attempt=${i} status=${statusRes.status}`);
-      continue; // transient — keep polling within budget
+      continue;
     }
     const statusJson = await statusRes.json();
+    const status = statusJson.data?.processing_status;
+    const transcript = statusJson.data?.audio_transcript;
 
-    // Log the FULL raw response on the first attempt, and again on the
-    // last attempt before giving up — enough to see the real shape without
-    // flooding logs on every one of the up-to-20 polls.
-    if (i === 0 || i === maxAttempts - 1) {
-      console.log(`sahara_stt_poll_raw attempt=${i} fileId=${fileId}`, JSON.stringify(statusJson));
-    }
-
-    const status = statusJson.data?.status ?? statusJson.status;
-    const transcript = statusJson.data?.transcript ?? statusJson.transcript;
-
-    if (status === 'completed' || status === 'success' || status === 'done') {
+    if (status === 'FILE_TRANSCRIBED') {
       if (!transcript) {
-        console.error('sahara_stt_status_completed_but_no_transcript', JSON.stringify(statusJson));
+        console.error('sahara_stt_transcribed_but_empty', JSON.stringify(statusJson));
         throw new Error('sahara_transcription_completed_but_missing_transcript');
       }
       return transcript;
     }
-    if (status === 'failed' || status === 'error') {
+    if (status === 'FILE_FAILED' || status === 'FAILED') {
       console.error('sahara_stt_status_failed', JSON.stringify(statusJson));
       throw new Error('sahara_transcription_failed_upstream');
     }
@@ -113,12 +94,7 @@ async function pollForTranscript(fileId, maxAttempts = 20, intervalMs = 1500) {
   throw new Error('sahara_transcription_timed_out');
 }
 
-// eslint-disable-next-line no-unused-vars
 async function transcribeStreaming(sessionId, audioBuffer, audioFileName) {
-  // TODO once Integrator Account access is confirmed:
-  // open wss://infer.voice.intron.io/stt/v1/stream, stream audio chunks
-  // (1KB-32KB per Sahara's documented limits), send commit message, resolve
-  // on final transcript. Session lifetime cap is 300s per Sahara docs.
   throw new Error('sahara_stt_streaming_not_yet_implemented');
 }
 
